@@ -226,6 +226,15 @@ void draw_static_hud(uint16_t buf) {
         last_level = current_level;
     }
 
+    if (demo_is_active()) {
+        set_text_color(LIGHT_GRAY);
+        // fill_rect2buffer(BLACK, 200, 14, 90, 7, buf);
+        set_cursor(100, 4);
+        draw_string2buffer("DEMO MODE", buf);
+        set_cursor(60, 14);
+        draw_string2buffer("Press any key to start", buf);
+    }
+
     if (state.current == STATE_GAME_OVER) {
         if (!last_game_over) {
             set_text_color(RED);
@@ -485,7 +494,7 @@ int main(void) {
             demo_was_stopped = true;
         }
 
-        if (demo_idle_update(state.current == STATE_START_SCREEN, any_key_pressed())) {
+        if (demo_idle_update((state.current == STATE_START_SCREEN || state.current == STATE_GAME_OVER), any_key_pressed())) {
             start_screen_drawn = false;
         }
 

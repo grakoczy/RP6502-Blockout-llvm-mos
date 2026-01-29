@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "blockout_demo.h"
 #include "blockout_types.h"
 #include "blockout_math.h"
@@ -9,7 +10,7 @@
 #include "blockout_state.h"
 #include "bitmap_graphics_db.h"
 
-static const uint16_t DEMO_START_DELAY_FRAMES = 90;
+static const uint16_t DEMO_START_DELAY_FRAMES = 600;
 
 static bool demo_mode = false;
 static uint16_t start_screen_idle_frames = 0;
@@ -210,6 +211,7 @@ bool demo_idle_update(bool is_start_screen, bool key_pressed) {
     }
 
     start_screen_idle_frames++;
+    printf("Idle frames: %u\n", start_screen_idle_frames);
     if (start_screen_idle_frames >= DEMO_START_DELAY_FRAMES) {
         demo_start();
         start_screen_idle_frames = 0;

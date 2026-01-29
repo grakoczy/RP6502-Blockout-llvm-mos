@@ -163,10 +163,6 @@ void switch_buffer(uint16_t buffer_data_address)
     }
 }
 
-// ---------------------------------------------------------------------------
-// Helper to infer plane from buffer address
-// Uses simple heuristic: buffers are typically grouped by plane
-// ---------------------------------------------------------------------------
 static PlaneConfig* last_plane_cache = NULL;
 static uint16_t last_buffer_cache = 0xFFFF;
 

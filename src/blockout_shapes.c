@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "bitmap_graphics_db.h"
 #include "blockout_types.h"
 #include "blockout_math.h"
