@@ -27,7 +27,7 @@
 uint8_t PIT_WIDTH = 5;
 uint8_t PIT_DEPTH = 5;
 uint8_t PIT_HEIGHT = 8;
-uint8_t selected_pit_size = 2; // Default to 5x5 (0=3x3, 1=4x4, 2=5x5)
+uint8_t selected_pit_size = 2; // Default to 5x5 (1=4x4, 2=5x5)
 
 uint8_t LEVEL_INDICATOR_HEIGHT = SCREEN_HEIGHT - LEVEL_INDICATOR_WIDTH * MAX_PIT_HEIGHT;
 

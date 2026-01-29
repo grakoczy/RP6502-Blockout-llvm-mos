@@ -335,52 +335,75 @@ void draw_line2plane(uint16_t color, int16_t x0, int16_t y0, int16_t x1, int16_t
         uint16_t bytes_per_row = plane->bytes_per_row;
         uint16_t current_row_addr = buffer_addr + get_row_offset(plane, y0);
         uint8_t color_nibble = color & 0x0F;
+        uint8_t color_hi = (uint8_t)(color_nibble << 4);
         
         // Pre-compute masks for both pixel positions
         uint8_t mask_high = 0x0F;  // Mask for high nibble (even x)
         uint8_t mask_low = 0xF0;   // Mask for low nibble (odd x)
+
+        // Very short lines: cheaper than full Bresenham/caching
+        if ((dx <= 2) && (dy <= 2)) {
+            int16_t steps = (dx > dy ? dx : dy) + 1;
+            RIA.step0 = 0;
+            for (int16_t i = 0; i < steps; i++) {
+                uint16_t addr = current_row_addr + (x0 >> 1);
+                uint8_t is_odd = (uint8_t)(x0 & 1);
+                RIA.addr0 = addr;
+                uint8_t val = RIA.rw0;
+                if (is_odd) {
+                    RIA.rw0 = (val & mask_low) | color_nibble;
+                } else {
+                    RIA.rw0 = (val & mask_high) | color_hi;
+                }
+
+                if (x0 == x1 && y0 == y1) break;
+                if (dx >= dy) x0 += sx;
+                if (dy >= dx) y0 += sy;
+                if (dy >= dx) {
+                    if (sy > 0) current_row_addr += bytes_per_row;
+                    else current_row_addr -= bytes_per_row;
+                }
+            }
+            return;
+        }
+        
+        RIA.step0 = 0;
         
         if (dx >= dy) { // X is major axis
             int16_t err = dx / 2;
             uint16_t last_byte_addr = 0xFFFF;
             uint8_t last_byte_val = 0;
             bool have_cached_byte = false;
+
+            uint16_t byte_addr = current_row_addr + (x0 >> 1);
+            uint8_t is_odd = (uint8_t)(x0 & 1);
             
-            for (; ; x0 += sx) {
-                uint16_t byte_addr = current_row_addr + (x0 >> 1);
-                uint8_t is_odd = x0 & 1;
-                
+            for (int16_t i = 0; i <= dx; i++) {
                 // Check if we can use cached byte (same address)
                 if (byte_addr == last_byte_addr && have_cached_byte) {
-                    // Reuse cached value
                     if (is_odd) {
                         last_byte_val = (last_byte_val & mask_low) | color_nibble;
                     } else {
-                        last_byte_val = (last_byte_val & mask_high) | (color_nibble << 4);
+                        last_byte_val = (last_byte_val & mask_high) | color_hi;
                     }
                 } else {
-                    // Write previous cached byte if we have one
                     if (have_cached_byte) {
                         RIA.addr0 = last_byte_addr;
                         RIA.rw0 = last_byte_val;
                     }
                     
-                    // Read new byte
                     RIA.addr0 = byte_addr;
-                    RIA.step0 = 0;
                     last_byte_val = RIA.rw0;
                     
                     if (is_odd) {
                         last_byte_val = (last_byte_val & mask_low) | color_nibble;
                     } else {
-                        last_byte_val = (last_byte_val & mask_high) | (color_nibble << 4);
+                        last_byte_val = (last_byte_val & mask_high) | color_hi;
                     }
                     
                     last_byte_addr = byte_addr;
                     have_cached_byte = true;
                 }
-                
-                if (x0 == x1) break;
                 
                 err -= dy;
                 if (err < 0) {
@@ -389,10 +412,29 @@ void draw_line2plane(uint16_t color, int16_t x0, int16_t y0, int16_t x1, int16_t
                     have_cached_byte = false;
                     
                     y0 += sy;
-                    if (sy > 0) current_row_addr += bytes_per_row;
-                    else current_row_addr -= bytes_per_row;
+                    if (sy > 0) {
+                        current_row_addr += bytes_per_row;
+                        byte_addr += bytes_per_row;
+                    } else {
+                        current_row_addr -= bytes_per_row;
+                        byte_addr -= bytes_per_row;
+                    }
                     err += dx;
                 }
+
+                if (i == dx) break;
+
+                x0 += sx;
+                if (sx > 0) {
+                    if (is_odd) {
+                        byte_addr++;
+                    }
+                } else {
+                    if (!is_odd) {
+                        byte_addr--;
+                    }
+                }
+                is_odd ^= 1;
             }
             
             if (have_cached_byte) {
@@ -402,37 +444,40 @@ void draw_line2plane(uint16_t color, int16_t x0, int16_t y0, int16_t x1, int16_t
             
         } else { 
             int16_t err = dy / 2;
-            uint16_t last_byte_addr = 0xFFFF;
+            uint16_t byte_addr = current_row_addr + (x0 >> 1);
+            uint8_t is_odd = (uint8_t)(x0 & 1);
             
-            RIA.step0 = 0;
-            
-            for (; ; y0 += sy) {
-                uint16_t byte_addr = current_row_addr + (x0 >> 1);
-                uint8_t is_odd = x0 & 1;
-                
-                if (byte_addr != last_byte_addr) {
-                    RIA.addr0 = byte_addr;
-                    last_byte_addr = byte_addr;
-                }
-                
+            for (int16_t i = 0; i <= dy; i++) {
+                RIA.addr0 = byte_addr;
                 uint8_t val = RIA.rw0;
                 
                 if (is_odd) {
                     RIA.rw0 = (val & mask_low) | color_nibble;
                 } else {
-                    RIA.rw0 = (val & mask_high) | (color_nibble << 4);
+                    RIA.rw0 = (val & mask_high) | color_hi;
                 }
-                
-                if (y0 == y1) break;
                 
                 err -= dx;
                 if (err < 0) {
                     x0 += sx;
+                    if (sx > 0) {
+                        if (is_odd) {
+                            byte_addr++;
+                        }
+                    } else {
+                        if (!is_odd) {
+                            byte_addr--;
+                        }
+                    }
+                    is_odd ^= 1;
                     err += dy;
                 }
                 
-                if (sy > 0) current_row_addr += bytes_per_row;
-                else current_row_addr -= bytes_per_row;
+                if (i == dy) break;
+                
+                y0 += sy;
+                if (sy > 0) byte_addr += bytes_per_row;
+                else byte_addr -= bytes_per_row;
             }
         }
         return;
