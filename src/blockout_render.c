@@ -107,14 +107,20 @@ void draw_level_color_indicator(uint16_t buf) {
 /* ================= DRAW ================= */
 
 
-static int16_t cache_px[MAX_BLOCKS * 8];
-static int16_t cache_py[MAX_BLOCKS * 8];
+static uint8_t cache_px[MAX_BLOCKS * 8];
+static uint8_t cache_py[MAX_BLOCKS * 8];
 static bool cache_valid[MAX_BLOCKS * 8];
 static int16_t vert_off_x[8];
 static int16_t vert_off_y[8];
 static int16_t vert_off_z[8];
 static int16_t vert_z_scale[8];
 static int16_t block_z_scale[MAX_BLOCKS];
+
+static inline uint8_t clamp_u8(int16_t value, uint8_t max_value) {
+    if (value < 0) return 0;
+    if (value > max_value) return max_value;
+    return (uint8_t)value;
+}
 
 void drawShape(uint16_t buffer) {
     if (state.current == STATE_GAME_OVER) return;
@@ -168,15 +174,17 @@ void drawShape(uint16_t buffer) {
             uint8_t v1 = edges[(e << 1) + 1];
             uint8_t c0 = (b << 3) + v0;
             uint8_t c1 = (b << 3) + v1;
-            int16_t sx0, sy0, sx1, sy1;
+            uint8_t sx0, sy0, sx1, sy1;
 
             if (!cache_valid[c0]) {
                 int16_t world_x = base_world_x + b_off_x + vert_off_x[v0];
                 int16_t world_y = base_world_y + b_off_y + vert_off_y[v0];
                 int16_t zi = base_zi + block_z_scale[b] + vert_z_scale[v0];
                 if (zi < 1) zi = 1; if (zi > 255) zi = 255;
-                cache_px[c0] = apply_perspective(world_x, (uint8_t)zi) + (VIEWPORT_WIDTH >> 1);
-                cache_py[c0] = apply_perspective(world_y, (uint8_t)zi) + (VIEWPORT_HEIGHT >> 1);
+                int16_t screen_x = apply_perspective(world_x, (uint8_t)zi) + (VIEWPORT_WIDTH >> 1);
+                int16_t screen_y = apply_perspective(world_y, (uint8_t)zi) + (VIEWPORT_HEIGHT >> 1);
+                cache_px[c0] = clamp_u8(screen_x, (uint8_t)(VIEWPORT_WIDTH - 1));
+                cache_py[c0] = clamp_u8(screen_y, (uint8_t)(VIEWPORT_HEIGHT - 1));
                 cache_valid[c0] = true;
             }
             sx0 = cache_px[c0];
@@ -187,14 +195,17 @@ void drawShape(uint16_t buffer) {
                 int16_t world_y = base_world_y + b_off_y + vert_off_y[v1];
                 int16_t zi = base_zi + block_z_scale[b] + vert_z_scale[v1];
                 if (zi < 1) zi = 1; if (zi > 255) zi = 255;
-                cache_px[c1] = apply_perspective(world_x, (uint8_t)zi) + (VIEWPORT_WIDTH >> 1);
-                cache_py[c1] = apply_perspective(world_y, (uint8_t)zi) + (VIEWPORT_HEIGHT >> 1);
+                int16_t screen_x = apply_perspective(world_x, (uint8_t)zi) + (VIEWPORT_WIDTH >> 1);
+                int16_t screen_y = apply_perspective(world_y, (uint8_t)zi) + (VIEWPORT_HEIGHT >> 1);
+                cache_px[c1] = clamp_u8(screen_x, (uint8_t)(VIEWPORT_WIDTH - 1));
+                cache_py[c1] = clamp_u8(screen_y, (uint8_t)(VIEWPORT_HEIGHT - 1));
                 cache_valid[c1] = true;
             }
             sx1 = cache_px[c1];
             sy1 = cache_py[c1];
 
-            draw_line2buffer(WHITE, sx0, sy0, sx1, sy1, buffer);
+            // draw_line2buffer(WHITE, sx0, sy0, sx1, sy1, buffer);
+            draw_line2buffer_small(WHITE, sx0, sy0, sx1, sy1, buffer);
         }
     }
 }

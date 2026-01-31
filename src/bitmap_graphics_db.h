@@ -58,6 +58,7 @@ void erase_buffer_sized(uint16_t buffer_data_address, uint16_t width, uint16_t h
 // ---------------------------------------------------------------------------
 void draw_pixel2buffer(uint16_t color, uint16_t x, uint16_t y, uint16_t buffer_data_address);
 void draw_line2buffer(uint16_t color, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t buffer_data_address);
+void draw_line2buffer_small(uint16_t color, uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, uint16_t buffer_addr);
 void draw_vline2buffer(uint16_t color, uint16_t x, uint16_t y, uint16_t h, uint16_t buffer_data_address);
 void draw_hline2buffer(uint16_t color, uint16_t x, uint16_t y, uint16_t w, uint16_t buffer_data_address);
 void draw_rect2buffer(uint16_t color, uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t buffer_data_address);
@@ -72,6 +73,7 @@ void fill_rounded_rect2buffer(uint16_t color, uint16_t x, uint16_t y, uint16_t w
 // ---------------------------------------------------------------------------
 void draw_pixel2plane(uint16_t color, uint16_t x, uint16_t y, uint16_t buffer_data_address, uint8_t plane_num);
 void draw_line2plane(uint16_t color, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t buffer_data_address, uint8_t plane_num);
+void draw_line2plane_small(uint16_t color, uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, uint16_t buffer_addr, uint8_t plane_num);
 
 // ---------------------------------------------------------------------------
 // Text rendering

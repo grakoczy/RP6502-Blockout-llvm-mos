@@ -203,7 +203,6 @@ void spawn_new_shape(void) {
         return;
     }
     
-    cubes_played += s->num_blocks;
     current_level = 1+ lines_cleared / 5;
     drop_delay = 60 - (current_level * 10);
     if (drop_delay < 10) drop_delay = 10;

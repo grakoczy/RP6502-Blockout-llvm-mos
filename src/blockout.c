@@ -72,6 +72,9 @@ static uint8_t active_shake_len = (uint8_t)(sizeof(shake_offsets_standard) / siz
 
 void mark_hud_dirty(void) {
     hud_dirty = true;
+    if (state.current != STATE_FAST_DROP) {
+        state.need_static_redraw = true;
+    }
 }
 
 void apply_selected_pit_size(void) {

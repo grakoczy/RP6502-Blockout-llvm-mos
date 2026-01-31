@@ -23,6 +23,9 @@ StateMachine state = {
 void change_state(GameState new_state) {
     state.previous = state.current;
     state.current = new_state;
+    if (state.previous == STATE_FAST_DROP && hud_dirty) {
+        state.need_static_redraw = true;
+    }
     if (new_state == STATE_GAME_OVER || state.previous == STATE_GAME_OVER) {
         mark_hud_dirty();
     }

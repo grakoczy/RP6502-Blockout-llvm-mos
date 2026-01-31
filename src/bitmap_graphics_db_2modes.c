@@ -515,11 +515,245 @@ void draw_line2plane(uint16_t color, int16_t x0, int16_t y0, int16_t x1, int16_t
     }
 }
 
+// Optimized version of draw_line2plane for planes smaller than 255x255 pixels
+// Uses uint8_t for unsigned coordinates and int8_t for signed deltas/directions
+// Only uses int16_t for final XRAM address calculations
+
+void draw_line2plane_small(uint16_t color, uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, 
+                           uint16_t buffer_addr, uint8_t plane_num)
+{
+    if (plane_num >= MAX_PLANES) return;
+    PlaneConfig* plane = &planes[plane_num];
+    if (!plane->initialized) return;
+
+    // Clipping - using uint8_t for plane dimensions (must be < 255)
+    uint8_t plane_width = (uint8_t)plane->width;
+    uint8_t plane_height = (uint8_t)plane->height;
+    
+    if (x0 >= plane_width) x0 = plane_width - 1;
+    if (y0 >= plane_height) y0 = plane_height - 1;
+    if (x1 >= plane_width) x1 = plane_width - 1;
+    if (y1 >= plane_height) y1 = plane_height - 1;
+
+    // Handle vertical lines
+    if (x0 == x1) {
+        uint8_t start_y = (y0 < y1) ? y0 : y1;
+        uint8_t h = (y0 < y1) ? (y1 - y0) : (y0 - y1);
+        draw_vline2buffer(color, x0, start_y, h + 1, buffer_addr);
+        return;
+    }
+    
+    // Handle horizontal lines
+    if (y0 == y1) {
+        uint8_t start_x = (x0 < x1) ? x0 : x1;
+        uint8_t w = (x0 < x1) ? (x1 - x0) : (x0 - x1);
+        draw_hline2buffer(color, start_x, y0, w + 1, buffer_addr);
+        return;
+    }
+
+    if (plane->bpp_mode == 2) { // 4bpp Optimized
+        // Calculate absolute differences using uint8_t (coordinates are always positive)
+        uint8_t dx = (x1 > x0) ? (x1 - x0) : (x0 - x1);
+        uint8_t dy = (y1 > y0) ? (y1 - y0) : (y0 - y1);
+        int8_t sx = (x0 < x1) ? 1 : -1;
+        int8_t sy = (y0 < y1) ? 1 : -1;
+        
+        // bytes_per_row is uint16_t since it's part of address calculation
+        uint16_t bytes_per_row = plane->bytes_per_row;
+        uint16_t current_row_addr = buffer_addr + get_row_offset(plane, y0);
+        uint8_t color_nibble = color & 0x0F;
+        uint8_t color_hi = (uint8_t)(color_nibble << 4);
+        
+        // Pre-compute masks for both pixel positions
+        uint8_t mask_high = 0x0F;  // Mask for high nibble (even x)
+        uint8_t mask_low = 0xF0;   // Mask for low nibble (odd x)
+
+        // Very short lines: cheaper than full Bresenham/caching
+        if ((dx <= 2) && (dy <= 2)) {
+            uint8_t steps = (dx > dy ? dx : dy) + 1;
+            RIA.step0 = 0;
+            for (uint8_t i = 0; i < steps; i++) {
+                uint16_t addr = current_row_addr + (x0 >> 1);
+                uint8_t is_odd = (uint8_t)(x0 & 1);
+                RIA.addr0 = addr;
+                uint8_t val = RIA.rw0;
+                if (is_odd) {
+                    RIA.rw0 = (val & mask_low) | color_nibble;
+                } else {
+                    RIA.rw0 = (val & mask_high) | color_hi;
+                }
+
+                if (x0 == x1 && y0 == y1) break;
+                if (dx >= dy) x0 += sx;
+                if (dy >= dx) y0 += sy;
+                if (dy >= dx) {
+                    if (sy > 0) current_row_addr += bytes_per_row;
+                    else current_row_addr -= bytes_per_row;
+                }
+            }
+            return;
+        }
+        
+        RIA.step0 = 0;
+        
+        if (dx >= dy) { // X is major axis
+            int8_t err = dx / 2;
+            uint16_t last_byte_addr = 0xFFFF;
+            uint8_t last_byte_val = 0;
+            bool have_cached_byte = false;
+
+            uint16_t byte_addr = current_row_addr + (x0 >> 1);
+            uint8_t is_odd = (uint8_t)(x0 & 1);
+            
+            for (uint8_t i = 0; i <= dx; i++) {
+                // Check if we can use cached byte (same address)
+                if (byte_addr == last_byte_addr && have_cached_byte) {
+                    if (is_odd) {
+                        last_byte_val = (last_byte_val & mask_low) | color_nibble;
+                    } else {
+                        last_byte_val = (last_byte_val & mask_high) | color_hi;
+                    }
+                } else {
+                    if (have_cached_byte) {
+                        RIA.addr0 = last_byte_addr;
+                        RIA.rw0 = last_byte_val;
+                    }
+                    
+                    RIA.addr0 = byte_addr;
+                    last_byte_val = RIA.rw0;
+                    
+                    if (is_odd) {
+                        last_byte_val = (last_byte_val & mask_low) | color_nibble;
+                    } else {
+                        last_byte_val = (last_byte_val & mask_high) | color_hi;
+                    }
+                    
+                    last_byte_addr = byte_addr;
+                    have_cached_byte = true;
+                }
+                
+                err -= dy;
+                if (err < 0) {
+                    RIA.addr0 = last_byte_addr;
+                    RIA.rw0 = last_byte_val;
+                    have_cached_byte = false;
+                    
+                    y0 += sy;
+                    if (sy > 0) {
+                        current_row_addr += bytes_per_row;
+                        byte_addr += bytes_per_row;
+                    } else {
+                        current_row_addr -= bytes_per_row;
+                        byte_addr -= bytes_per_row;
+                    }
+                    err += dx;
+                }
+
+                if (i == dx) break;
+
+                x0 += sx;
+                if (sx > 0) {
+                    if (is_odd) {
+                        byte_addr++;
+                    }
+                } else {
+                    if (!is_odd) {
+                        byte_addr--;
+                    }
+                }
+                is_odd ^= 1;
+            }
+            
+            if (have_cached_byte) {
+                RIA.addr0 = last_byte_addr;
+                RIA.rw0 = last_byte_val;
+            }
+            
+        } else { // Y is major axis
+            int8_t err = dy / 2;
+            uint16_t byte_addr = current_row_addr + (x0 >> 1);
+            uint8_t is_odd = (uint8_t)(x0 & 1);
+            
+            for (uint8_t i = 0; i <= dy; i++) {
+                RIA.addr0 = byte_addr;
+                uint8_t val = RIA.rw0;
+                
+                if (is_odd) {
+                    RIA.rw0 = (val & mask_low) | color_nibble;
+                } else {
+                    RIA.rw0 = (val & mask_high) | color_hi;
+                }
+                
+                err -= dx;
+                if (err < 0) {
+                    x0 += sx;
+                    if (sx > 0) {
+                        if (is_odd) {
+                            byte_addr++;
+                        }
+                    } else {
+                        if (!is_odd) {
+                            byte_addr--;
+                        }
+                    }
+                    is_odd ^= 1;
+                    err += dy;
+                }
+                
+                if (i == dy) break;
+                
+                y0 += sy;
+                if (sy > 0) byte_addr += bytes_per_row;
+                else byte_addr -= bytes_per_row;
+            }
+        }
+        return;
+    }
+
+    // Fallback for other modes (1bpp)
+    uint8_t dx = (x1 > x0) ? (x1 - x0) : (x0 - x1);
+    uint8_t dy = (y1 > y0) ? (y1 - y0) : (y0 - y1);
+    int8_t sx = (x0 < x1) ? 1 : -1;
+    int8_t sy = (y0 < y1) ? 1 : -1; 
+    int8_t err = (dx > dy ? dx : -dy) / 2;
+    uint16_t bytes_per_row = plane->bytes_per_row;
+    uint16_t row_addr = buffer_addr + get_row_offset(plane, y0);
+
+    RIA.step0 = 0;
+    if (plane->bpp_mode == 0) { // 1bpp
+        while(true) {
+            uint16_t addr = row_addr + (x0 >> 3);
+            uint8_t bitmask = 0x80 >> (x0 & 7);
+            RIA.addr0 = addr;
+            uint8_t val = RIA.rw0;
+            if (color) val |= bitmask;
+            else val &= ~bitmask;
+            RIA.rw0 = val;
+
+            if (x0 == x1 && y0 == y1) break;
+            int8_t e2 = err;
+            if (e2 > -dx) { err -= dy; x0 += sx; }
+            if (e2 < dy) { 
+                err += dx; y0 += sy; 
+                if (sy > 0) row_addr += bytes_per_row;
+                else row_addr -= bytes_per_row;
+            }
+        }
+    }
+}
+
 void draw_line2buffer(uint16_t color, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t buffer_addr)
 {
     PlaneConfig* plane = infer_plane_from_buffer(buffer_addr);
     if (!plane) return;
     draw_line2plane(color, x0, y0, x1, y1, buffer_addr, (uint8_t)(plane - planes));
+}
+
+void draw_line2buffer_small(uint16_t color, uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, uint16_t buffer_addr)
+{
+    PlaneConfig* plane = infer_plane_from_buffer(buffer_addr);
+    if (!plane) return;
+    draw_line2plane_small(color, x0, y0, x1, y1, buffer_addr, (uint8_t)(plane - planes));
 }
 
 void draw_vline2buffer(uint16_t color, uint16_t x, uint16_t y, uint16_t h, uint16_t buffer_data_address)

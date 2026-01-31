@@ -26,5 +26,5 @@ target_sources(blockout PRIVATE
     src/ezpsg.c
     src/sound.c
 )
-set(CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG" CACHE STRING "Flags used by the C compiler for Release builds." FORCE)
-set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG" CACHE STRING "Flags used by the C++ compiler for Release builds." FORCE)
+set(CMAKE_C_FLAGS_RELEASE "-O2 -fomit-frame-pointer -DNDEBUG" CACHE STRING "Flags used by the C compiler for Release builds." FORCE)
+set(CMAKE_CXX_FLAGS_RELEASE "-O2 -fomit-frame-pointer -DNDEBUG" CACHE STRING "Flags used by the C++ compiler for Release builds." FORCE)

@@ -138,11 +138,12 @@ void lock_shape(void) {
         draw_incremental_lock(min_x, max_x, min_y, max_y, max_z);
     }
 
+    cubes_played += s->num_blocks;
+    mark_hud_dirty();
+
     check_and_clear_layers();
     spawn_new_shape(); 
     
-    // IMPORTANT: Remove this line, otherwise main loop will redraw everything again
-    // state.need_static_redraw = true; 
 }
 
 uint8_t count_occupied_levels(void) {

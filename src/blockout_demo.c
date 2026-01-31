@@ -25,6 +25,7 @@ static int8_t demo_move_dir_y = 0;   // -1 = front, 1 = back, 0 = no move
 static uint8_t demo_steps_x = 0;     // Steps remaining in X
 static uint8_t demo_steps_y = 0;     // Steps remaining in Y
 static bool demo_movement_done = false;
+static bool demo_center_drop_active = false;
 
 extern void apply_selected_pit_size(void);
 extern void reset_game_state(void);
@@ -36,6 +37,25 @@ static bool demo_should_reset(void) {
     return (occupied >= (uint8_t)(PIT_HEIGHT - 2));
 }
 
+
+// Fill the bottom level of the pit with cubes, except for the center position
+static void demo_fill_bottom_level(void) {
+    uint8_t bottom_z = PIT_HEIGHT - 1;
+    uint8_t center_x = PIT_WIDTH / 2;
+    uint8_t center_y = PIT_DEPTH / 2;
+    
+    for (uint8_t y = 0; y < PIT_DEPTH; y++) {
+        for (uint8_t x = 0; x < PIT_WIDTH; x++) {
+            // Skip the center position
+            if (x == center_x && y == center_y) {
+                pit[bottom_z][y][x] = 0;
+            } else {
+                pit[bottom_z][y][x] = 1;
+                pit_colors[bottom_z][y][x] = layer_colors[bottom_z];
+            }
+        }
+    }
+}
 
 
 
@@ -126,23 +146,32 @@ static void demo_execute_movement_step(void) {
 
 static void demo_reset_cycle(void) {
     reset_game_state();
+    demo_fill_bottom_level();
     update_static_buffer();
 
     demo_clear_target = 1 + (uint8_t)random(0, 2);
     demo_lines_base = lines_cleared;
     demo_timer = 0;
+    demo_center_drop_active = true;
 
+    next_shape_idx = 0;
     spawn_new_shape();
     demo_last_cubes_played = cubes_played;
-    demo_plan_random_movement();
+    demo_movement_done = false;
 }
 
 static void demo_on_new_shape(void) {
+    if (demo_center_drop_active) {
+        demo_center_drop_active = false;
+        demo_lines_base = lines_cleared;
+        demo_plan_random_movement();
+        return;
+    }
+
     if (lines_cleared >= (uint16_t)(demo_lines_base + demo_clear_target)) {
         demo_reset_cycle();
         return;
     }
-
     demo_plan_random_movement();
 }
 
@@ -166,6 +195,14 @@ void demo_tick(void) {
     if (state.current != STATE_PLAYING) return;
 
     demo_timer++;
+
+    if (demo_center_drop_active) {
+        if (demo_timer > 20) {
+            change_state(STATE_FAST_DROP);
+            demo_timer = 0;
+        }
+        return;
+    }
     
     // Execute movement steps periodically
     if ((demo_timer % random(8, 50)) == 0) {
